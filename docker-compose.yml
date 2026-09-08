@@ -1,0 +1,97 @@
+# ============================================================
+# ECLIPSE V2.0.0 — Orchestration complète
+#   PostgreSQL (données principales) + MongoDB (chat)
+#   + Backend NestJS + Frontend React
+# ============================================================
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: eclipse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eclipse
+      POSTGRES_PASSWORD: eclipse
+      POSTGRES_DB: eclipse
+    ports:
+      - "5432:5432"
+    volumes:
+      - eclipse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eclipse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    container_name: eclipse-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - eclipse_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: eclipse-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      JWT_SECRET: change-me-in-production
+      JWT_EXPIRES_IN: 8h
+      CORS_ORIGIN: http://localhost:5173
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: eclipse
+      POSTGRES_PASSWORD: eclipse
+      POSTGRES_DB: eclipse
+      MONGO_URI: mongodb://mongo:27017/eclipse_chat
+      DOCUMENTS_STORAGE_DRIVER: local
+      DOCUMENTS_LOCAL_PATH: /app/uploads
+      # --- Intégrations réelles : à renseigner vous-même (voir backend/.env.example) ---
+      PAYMENT_PROVIDER: simulation
+      STRIPE_SECRET_KEY: ""
+      GOCARDLESS_ACCESS_TOKEN: ""
+      BANK_PROVIDER: simulation
+      BANK_CLIENT_ID: ""
+      BANK_CLIENT_SECRET: ""
+      OUTLOOK_PROVIDER: simulation
+      MS_TENANT_ID: ""
+      MS_CLIENT_ID: ""
+      MS_CLIENT_SECRET: ""
+      MS_REDIRECT_URI: http://localhost:3000/api/outlook-callback
+    ports:
+      - "3000:3000"
+    volumes:
+      - eclipse_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:3000/api
+        VITE_WS_URL: http://localhost:3000
+    container_name: eclipse-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  eclipse_postgres_data:
+  eclipse_mongo_data:
+  eclipse_uploads:
